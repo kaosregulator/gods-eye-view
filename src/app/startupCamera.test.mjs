@@ -23,3 +23,12 @@ test('teardown before the initial camera delay prevents a late flight', (t) => {
   assert.equal(flights, 0);
   assert.equal(cancelled, 1);
 });
+
+test('the app opens over Pueblo unless the build names another home', async () => {
+  const { resolveHomeView, homeCityName, HOME_VIEWS } =
+    await import('../camera.js');
+  assert.equal(resolveHomeView().city, 'pueblo');
+  assert.equal(resolveHomeView('Austin').city, 'austin');
+  assert.equal(resolveHomeView('atlantis').city, 'pueblo');
+  assert.equal(homeCityName(HOME_VIEWS.pueblo), 'Pueblo');
+});

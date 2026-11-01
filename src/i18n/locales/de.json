@@ -1,5 +1,5 @@
 {
-  "Flying to Austin, TX...": "Flug nach Austin, TX...",
+  "Flying to {place}...": "Flug nach {place}...",
   "Restoring shared view...": "Geteilte Ansicht wird wiederhergestellt...",
   "Configuring viewer...": "Viewer wird konfiguriert...",
   "Loading Google 3D Tiles...": "Google 3D Tiles werden geladen...",
@@ -2216,6 +2216,7 @@
   "More": "Mehr",
   "Panels": "Bereiche",
   "Austin": "Austin",
+  "Pueblo": "Pueblo",
   "San Francisco": "San Francisco",
   "New York": "New York",
   "Tokyo": "Tokio",

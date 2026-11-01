@@ -1,6 +1,6 @@
 import { catalogControlServices } from './catalog.js';
 import { StyleManager } from '../ui/composition.js';
-import { flyToAustin } from '../camera.js';
+import { flyToHome, homeCityName, resolveHomeView } from '../camera.js';
 import { initCockpitCloudEffects } from '../cockpitCloudEffects.js';
 import { t } from '../i18n/index.js';
 
@@ -47,10 +47,14 @@ export function createApplicationControls({
   });
   defer(() => cockpitCloudEffects?.destroy());
 
-  // If no share link state, do default fly-to Austin
+  // If no share link state, fly to the home city (Pueblo unless the build
+  // names another with VITE_GEV_HOME_CITY).
   if (!styleManager.hasShareState) {
-    loaderStatus.textContent = t('Flying to Austin, TX...');
-    defer(flyToAustin(viewer));
+    const home = resolveHomeView();
+    loaderStatus.textContent = t('Flying to {place}...', {
+      place: homeCityName(home),
+    });
+    defer(flyToHome(viewer, home));
   } else {
     loaderStatus.textContent = t('Restoring shared view...');
   }

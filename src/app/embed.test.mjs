@@ -393,3 +393,99 @@ test('a followed aircraft owns the camera, and cockpit view is entered after it'
     /no cockpit view/,
   );
 });
+
+test('an embedded page draws host overlays and reports their clicks', async () => {
+  const posted = [];
+  const parent = { postMessage: (message) => posted.push(message) };
+  const windowRef = new EventTarget();
+  windowRef.parent = parent;
+  windowRef.document = { body: { classList: new Set() } };
+  windowRef.document.body.classList.add = Set.prototype.add;
+  const drawn = [];
+  let select = null;
+  let destroyed = false;
+  const overlayFactory = ({ onSelect }) => {
+    select = onSelect;
+    return {
+      set(overlay) {
+        if (!overlay?.id) throw new TypeError('Overlay must be an object');
+        drawn.push(overlay.id);
+        return { overlayId: overlay.id, drawn: 1, skipped: 0 };
+      },
+      clear(id) {
+        drawn.splice(0, drawn.length, ...drawn.filter((d) => id && d !== id));
+      },
+      destroy() {
+        destroyed = true;
+      },
+    };
+  };
+  const { calls, run } = recorder();
+  const viewer = fakeViewer();
+  viewer.camera.flyToBoundingSphere = () => calls.push(['camera-flight']);
+  const remove = installViews({
+    shell: { initialRestorePromise: Promise.resolve() },
+    viewer,
+    dataManager: fakeLayers(new Set()),
+    run,
+    location: { search: '?embed=1', hash: '' },
+    windowRef,
+    overlayFactory,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const send = (source, data) => {
+    const event = new Event('message');
+    Object.assign(event, { source, data, origin: 'https://pulse.example' });
+    windowRef.dispatchEvent(event);
+  };
+  send({}, { type: 'gev:overlay', id: 1, overlay: { id: 'stranger' } });
+  send(parent, { type: 'gev:overlay', id: 2, overlay: { id: 'events' } });
+  send(parent, { type: 'gev:overlay', id: 3, overlay: null });
+  send(parent, {
+    type: 'gev:layer',
+    id: 4,
+    layerId: 'weather-radar',
+    enabled: true,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.deepEqual(drawn, ['events']);
+  assert.deepEqual(
+    posted.find((m) => m.id === 2),
+    {
+      type: 'gev:overlay-applied',
+      id: 2,
+      ok: true,
+      overlayId: 'events',
+      drawn: 1,
+      skipped: 0,
+    },
+  );
+  assert.equal(posted.find((m) => m.id === 3).ok, false);
+  assert.equal(posted.find((m) => m.id === 4).ok, true);
+  assert.ok(
+    calls.some(
+      ([name, args]) =>
+        name === 'set_layer_visibility' &&
+        args.layerId === 'weather-radar' &&
+        args.enabled === true,
+    ),
+  );
+  select({ overlayId: 'events', featureId: 'evt-1', name: 'Concert' });
+  assert.deepEqual(posted.at(-1), {
+    type: 'gev:overlay-select',
+    overlayId: 'events',
+    featureId: 'evt-1',
+    name: 'Concert',
+  });
+  send(parent, { type: 'gev:overlay-clear', id: 5, overlayId: 'events' });
+  assert.deepEqual(drawn, []);
+  // A host flight first releases whatever the globe is following.
+  send(parent, { type: 'gev:fly-to', id: 6, lat: 38.27, lon: -104.61 });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(posted.find((m) => m.id === 6).ok, true);
+  const names = calls.map(([name]) => name);
+  assert.ok(names.indexOf('stop_tracking') >= 0);
+  assert.ok(names.indexOf('stop_tracking') < names.indexOf('camera-flight'));
+  remove();
+  assert.equal(destroyed, true);
+});

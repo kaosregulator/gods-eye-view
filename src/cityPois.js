@@ -15,6 +15,61 @@
  *   buildingHeight — estimated height of landmark center above ground (meters)
  */
 export const CITY_POIS = {
+  pueblo: {
+    name: 'Pueblo',
+    groundElevation: 1414, // ~1,430 m above sea level; geoid about -16 m
+    viewBounds: {
+      southwest: { lat: 38.15, lng: -104.85 },
+      northeast: { lat: 38.38, lng: -104.45 },
+    },
+    pois: [
+      {
+        name: 'Historic Arkansas Riverwalk',
+        lat: 38.2647,
+        lon: -104.6106,
+        alt: 700,
+        pitch: -30,
+        heading: 20,
+        buildingHeight: 10,
+      },
+      {
+        name: 'Pueblo Union Depot',
+        lat: 38.262,
+        lon: -104.6153,
+        alt: 450,
+        pitch: -25,
+        heading: 300,
+        buildingHeight: 25,
+      },
+      {
+        name: 'Mineral Palace Park',
+        lat: 38.2858,
+        lon: -104.6075,
+        alt: 650,
+        pitch: -30,
+        heading: 0,
+        buildingHeight: 5,
+      },
+      {
+        name: 'Colorado State Fairgrounds',
+        lat: 38.2559,
+        lon: -104.6315,
+        alt: 800,
+        pitch: -30,
+        heading: 45,
+        buildingHeight: 15,
+      },
+      {
+        name: 'Pueblo Dam & Lake Pueblo',
+        lat: 38.2697,
+        lon: -104.7215,
+        alt: 2500,
+        pitch: -25,
+        heading: 270,
+        buildingHeight: 40,
+      },
+    ],
+  },
   austin: {
     name: 'Austin',
     groundElevation: 150, // meters above WGS84 ellipsoid
