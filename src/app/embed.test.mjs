@@ -421,9 +421,11 @@ test('an embedded page draws host overlays and reports their clicks', async () =
     };
   };
   const { calls, run } = recorder();
+  const viewer = fakeViewer();
+  viewer.camera.flyToBoundingSphere = () => calls.push(['camera-flight']);
   const remove = installViews({
     shell: { initialRestorePromise: Promise.resolve() },
-    viewer: fakeViewer(),
+    viewer,
     dataManager: fakeLayers(new Set()),
     run,
     location: { search: '?embed=1', hash: '' },
@@ -477,6 +479,13 @@ test('an embedded page draws host overlays and reports their clicks', async () =
   });
   send(parent, { type: 'gev:overlay-clear', id: 5, overlayId: 'events' });
   assert.deepEqual(drawn, []);
+  // A host flight first releases whatever the globe is following.
+  send(parent, { type: 'gev:fly-to', id: 6, lat: 38.27, lon: -104.61 });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(posted.find((m) => m.id === 6).ok, true);
+  const names = calls.map(([name]) => name);
+  assert.ok(names.indexOf('stop_tracking') >= 0);
+  assert.ok(names.indexOf('stop_tracking') < names.indexOf('camera-flight'));
   remove();
   assert.equal(destroyed, true);
 });

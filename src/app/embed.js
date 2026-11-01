@@ -325,22 +325,32 @@ export function installViews({
         answer({ ok: false, error: 'Invalid coordinates' });
         return;
       }
-      announceNavigationAuthority('embed-view');
-      viewer.camera.flyToBoundingSphere(
-        new Cesium.BoundingSphere(
-          Cesium.Cartesian3.fromDegrees(target.lon, target.lat),
-          50,
-        ),
-        {
-          offset: new Cesium.HeadingPitchRange(
-            Cesium.Math.toRadians(target.headingDeg),
-            Cesium.Math.toRadians(target.pitchDeg),
-            target.rangeM,
+      queue = queue.then(async () => {
+        if (signal?.aborted) return;
+        // Release any followed aircraft or satellite first, as a view does;
+        // otherwise tracking pulls the camera back from the host's target.
+        try {
+          await run('stop_tracking', {});
+        } catch {
+          /* nothing was tracked */
+        }
+        announceNavigationAuthority('embed-view');
+        viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(
+            Cesium.Cartesian3.fromDegrees(target.lon, target.lat),
+            50,
           ),
-          duration: FLIGHT_SECONDS,
-        },
-      );
-      answer({ ok: true });
+          {
+            offset: new Cesium.HeadingPitchRange(
+              Cesium.Math.toRadians(target.headingDeg),
+              Cesium.Math.toRadians(target.pitchDeg),
+              target.rangeM,
+            ),
+            duration: FLIGHT_SECONDS,
+          },
+        );
+        answer({ ok: true });
+      });
       return;
     }
     if (data.type === HOST_LAYER_MESSAGE) {
