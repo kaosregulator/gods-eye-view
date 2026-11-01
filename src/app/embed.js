@@ -14,6 +14,15 @@
 import * as Cesium from 'cesium';
 import { announceNavigationAuthority } from '../navigationPolicy.js';
 import { annotationsFromParams, createView } from '../view/index.js';
+import {
+  HOST_FLY_TO_MESSAGE,
+  HOST_LAYER_MESSAGE,
+  HOST_OVERLAY_CLEAR_MESSAGE,
+  HOST_OVERLAY_MESSAGE,
+  HOST_OVERLAY_SELECT_MESSAGE,
+  normalizeFlyTo,
+} from './hostOverlayModel.js';
+import { createHostOverlays } from './hostOverlays.js';
 
 const EMBED_VIEW_MESSAGE = 'gev:view';
 const EMBED_APPLIED_MESSAGE = 'gev:view-applied';
@@ -252,6 +261,7 @@ export function installViews({
   signal,
   location = globalThis.location,
   windowRef = globalThis.window,
+  overlayFactory = createHostOverlays,
 }) {
   const ready = Promise.resolve(shell.initialRestorePromise).catch(() => {});
   const linked = annotationsFromParams(
@@ -279,14 +289,96 @@ export function installViews({
   };
   // Views apply one at a time, in the order they arrive.
   let queue = ready;
-  const onMessage = (event) => {
-    if (event.source !== peer || event.data?.type !== EMBED_VIEW_MESSAGE)
+  // Host overlays: data the framing page draws on the globe (see
+  // hostOverlayModel.js). The host answer goes to the last origin that spoke.
+  let hostOrigin = '*';
+  let overlays = null;
+  const hostOverlays = () => {
+    overlays ??= overlayFactory({
+      viewer,
+      onSelect: (selection) =>
+        post({ type: HOST_OVERLAY_SELECT_MESSAGE, ...selection }, hostOrigin),
+    });
+    return overlays;
+  };
+  const onHostMessage = (data, replyOrigin) => {
+    hostOrigin = replyOrigin;
+    const { id = null } = data;
+    const answer = (body) =>
+      post({ type: `${data.type}-applied`, id, ...body }, replyOrigin);
+    if (data.type === HOST_OVERLAY_MESSAGE) {
+      try {
+        answer({ ok: true, ...hostOverlays().set(data.overlay) });
+      } catch (error) {
+        answer({ ok: false, error: error.message });
+      }
       return;
-    const { id = null } = event.data;
+    }
+    if (data.type === HOST_OVERLAY_CLEAR_MESSAGE) {
+      overlays?.clear(data.overlayId ?? null);
+      answer({ ok: true });
+      return;
+    }
+    if (data.type === HOST_FLY_TO_MESSAGE) {
+      const target = normalizeFlyTo(data);
+      if (!target) {
+        answer({ ok: false, error: 'Invalid coordinates' });
+        return;
+      }
+      announceNavigationAuthority('embed-view');
+      viewer.camera.flyToBoundingSphere(
+        new Cesium.BoundingSphere(
+          Cesium.Cartesian3.fromDegrees(target.lon, target.lat),
+          50,
+        ),
+        {
+          offset: new Cesium.HeadingPitchRange(
+            Cesium.Math.toRadians(target.headingDeg),
+            Cesium.Math.toRadians(target.pitchDeg),
+            target.rangeM,
+          ),
+          duration: FLIGHT_SECONDS,
+        },
+      );
+      answer({ ok: true });
+      return;
+    }
+    if (data.type === HOST_LAYER_MESSAGE) {
+      queue = queue.then(async () => {
+        if (signal?.aborted) return;
+        try {
+          const result = await run('set_layer_visibility', {
+            layerId: String(data.layerId ?? ''),
+            enabled: data.enabled === true,
+          });
+          answer({
+            ok: result?.ok !== false,
+            ...(result?.error ? { error: result.error } : {}),
+          });
+        } catch (error) {
+          answer({ ok: false, error: error?.message || String(error) });
+        }
+      });
+    }
+  };
+  const HOST_MESSAGES = new Set([
+    HOST_OVERLAY_MESSAGE,
+    HOST_OVERLAY_CLEAR_MESSAGE,
+    HOST_FLY_TO_MESSAGE,
+    HOST_LAYER_MESSAGE,
+  ]);
+  const onMessage = (event) => {
+    if (event.source !== peer) return;
     const replyOrigin =
       isEmbeddedInline() || !event.origin || event.origin === 'null'
         ? '*'
         : event.origin;
+    if (HOST_MESSAGES.has(event.data?.type)) {
+      onHostMessage(event.data, replyOrigin);
+      return;
+    }
+    if (event.data?.type !== EMBED_VIEW_MESSAGE) return;
+    const { id = null } = event.data;
     let view;
     try {
       view = createView(event.data.view);
@@ -322,6 +414,8 @@ export function installViews({
   });
   return () => {
     stopRendering();
+    overlays?.destroy();
+    overlays = null;
     windowRef.removeEventListener('message', onMessage);
   };
 }
